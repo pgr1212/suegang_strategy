@@ -130,18 +130,16 @@ public class MainFrame extends JFrame {
         searchPanel.add(searchBar, BorderLayout.NORTH);
 
         // 전체 과목 테이블
-        String[] colsAll = {"번호", "학정번호", "과목명", "구분", "교수", "정원", "담은인원", "경쟁률", "위험도", "성공확률"};
+        String[] colsAll = {"번호", "학정번호", "과목명", "구분", "교수", "정원", "담은인원", "경쟁률"};
         modelAllCourses = UIHelper.createReadOnlyModel(colsAll);
         tableAll = new JTable(modelAllCourses);
         UIHelper.styleTable(tableAll);
         tableAll.getColumnModel().getColumn(7).setCellRenderer(new UIHelper.RateColorRenderer());
-        tableAll.getColumnModel().getColumn(8).setCellRenderer(new UIHelper.RiskBgRenderer());
-        tableAll.getColumnModel().getColumn(9).setCellRenderer(new UIHelper.ProgressBarRenderer());
         tableAll.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         tableAll.setRowHeight(26);
 
         // 컬럼 너비
-        int[] widths = {35, 85, 120, 50, 60, 45, 60, 65, 70, 65};
+        int[] widths = {35, 85, 140, 55, 70, 50, 70, 80};
         for (int i = 0; i < widths.length; i++)
             tableAll.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
 
@@ -322,14 +320,13 @@ public class MainFrame extends JFrame {
         desc.setForeground(new Color(60, 80, 120));
         p.add(desc, BorderLayout.NORTH);
 
-        String[] cols = {"순위", "학정번호", "과목명", "이수구분", "교수", "정원", "담은인원", "경쟁률", "위험도", "위험점수", "성공확률", "경쟁률 바"};
+        String[] cols = {"순위", "학정번호", "과목명", "이수구분", "교수", "정원", "담은인원", "위험도", "위험점수", "성공확률", "경쟁률 바"};
         DefaultTableModel model = UIHelper.createReadOnlyModel(cols);
         JTable table = new JTable(model);
         UIHelper.styleTable(table);
-        table.getColumnModel().getColumn(7).setCellRenderer(new UIHelper.RateColorRenderer());
-        table.getColumnModel().getColumn(8).setCellRenderer(new UIHelper.RiskBgRenderer());
-        table.getColumnModel().getColumn(10).setCellRenderer(new UIHelper.ProgressBarRenderer());
-        table.getColumnModel().getColumn(11).setCellRenderer(new UIHelper.RateBarRenderer());
+        table.getColumnModel().getColumn(7).setCellRenderer(new UIHelper.RiskBgRenderer());
+        table.getColumnModel().getColumn(9).setCellRenderer(new UIHelper.ProgressBarRenderer());
+        table.getColumnModel().getColumn(10).setCellRenderer(new UIHelper.RateBarRenderer());
         table.setRowHeight(28);
 
         // 데이터 채우기
@@ -339,7 +336,6 @@ public class MainFrame extends JFrame {
             model.addRow(new Object[]{
                     (i + 1), c.getCode(), c.getName(), c.getType(), c.getProfessor(),
                     c.getCapacity(), c.getSavedCount(),
-                    String.format("%.2f:1", c.getCompetitionRate()),
                     c.getRiskLevel().getLabel(),
                     c.getFailureRiskScore() + "점",
                     c.getSuccessProbability(),
@@ -348,7 +344,7 @@ public class MainFrame extends JFrame {
         }
 
         // 컬럼 너비
-        int[] w = {40, 80, 120, 50, 55, 45, 60, 65, 70, 65, 65, 200};
+        int[] w = {40, 80, 130, 55, 60, 45, 60, 70, 65, 65, 220};
         for (int i = 0; i < w.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(w[i]);
 
         p.add(new JScrollPane(table), BorderLayout.CENTER);
@@ -371,9 +367,7 @@ public class MainFrame extends JFrame {
             modelAllCourses.addRow(new Object[]{
                     no++, c.getCode(), c.getName(), c.getType(), c.getProfessor(),
                     c.getCapacity(), c.getSavedCount(),
-                    String.format("%.2f:1", c.getCompetitionRate()),
-                    c.getRiskLevel().getLabel(),
-                    c.getSuccessProbability()
+                    String.format("%.2f:1", c.getCompetitionRate())
             });
         }
     }

@@ -40,9 +40,9 @@ public class StrategyPanel extends JPanel {
     // ── 리포트 탭 ──
     private JTextArea txtReport;
 
-    // ── 플랜 A/B 탭 ──
-    private DefaultTableModel modelPlanA, modelPlanB;
-    private JLabel lblPlanACredit, lblPlanBCredit;
+    // ── 플랜 A/B/C 탭 ──
+    private DefaultTableModel modelPlanA, modelPlanB, modelPlanC;
+    private JLabel lblPlanACredit, lblPlanBCredit, lblPlanCCredit;
 
     // ── 구분별 탭 ──
     private DefaultTableModel modelAvgRate;
@@ -387,26 +387,24 @@ public class StrategyPanel extends JPanel {
     }
 
     // ──────────────────────────────────────────────
-    // 탭 5: 플랜 A/B
+    // 탭 5: 플랜 A/B/C
     // ──────────────────────────────────────────────
     private JPanel buildPlanTab() {
-        JPanel p = new JPanel(new GridLayout(1, 2, 10, 0));
+        JPanel p = new JPanel(new GridLayout(1, 3, 8, 0));
         p.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         p.setBackground(UIHelper.COLOR_BG);
+
+        String[] cols = {"순위", "과목명", "이수구분", "경쟁률", "위험도", "위험점수", "성공확률"};
 
         // 플랜 A
         JPanel panelA = new JPanel(new BorderLayout(0, 4));
         panelA.setBackground(UIHelper.COLOR_BG);
         panelA.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createLineBorder(UIHelper.COLOR_DANGER, 1),
-                "📌 플랜 A — 원하는 과목 우선 전략 (공격적)"));
-
-        JLabel descA = new JLabel("<html><small>경쟁률이 높은 과목부터 신청 — 인기 과목을 먼저 잡는 전략<br>"
-                + "장점: 원하는 과목 시도 가능 | 단점: 실패 위험 높음</small></html>");
+                "📌 플랜 A — 공격적 전략"));
+        JLabel descA = new JLabel("<html><small>경쟁률 높은 순 — 인기 과목 우선<br>장점: 원하는 과목 시도 | 단점: 실패 위험 높음</small></html>");
         descA.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
         panelA.add(descA, BorderLayout.NORTH);
-
-        String[] cols = {"순위", "과목명", "이수구분", "경쟁률", "위험도", "위험점수", "성공확률"};
         modelPlanA = UIHelper.createReadOnlyModel(cols);
         JTable tA = new JTable(modelPlanA);
         UIHelper.styleTable(tA);
@@ -414,7 +412,6 @@ public class StrategyPanel extends JPanel {
         tA.getColumnModel().getColumn(4).setCellRenderer(new UIHelper.RiskBgRenderer());
         tA.getColumnModel().getColumn(6).setCellRenderer(new UIHelper.ProgressBarRenderer());
         panelA.add(new JScrollPane(tA), BorderLayout.CENTER);
-
         lblPlanACredit = new JLabel("총 학점: -");
         lblPlanACredit.setFont(UIHelper.FONT_BODY);
         lblPlanACredit.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
@@ -425,13 +422,10 @@ public class StrategyPanel extends JPanel {
         panelB.setBackground(UIHelper.COLOR_BG);
         panelB.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createLineBorder(UIHelper.COLOR_RELAXED, 1),
-                "📌 플랜 B — 안정적인 신청 전략 (보수적)"));
-
-        JLabel descB = new JLabel("<html><small>실패 위험 점수가 낮은 과목부터 신청 — 성공률을 높이는 전략<br>"
-                + "장점: 전체 성공 가능성 높음 | 단점: 인기 과목 놓칠 수 있음</small></html>");
+                "📌 플랜 B — 안정적 전략"));
+        JLabel descB = new JLabel("<html><small>위험점수 낮은 순 — 성공률 우선<br>장점: 전체 성공 가능성 높음 | 단점: 인기 과목 놓칠 수 있음</small></html>");
         descB.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
         panelB.add(descB, BorderLayout.NORTH);
-
         modelPlanB = UIHelper.createReadOnlyModel(cols);
         JTable tB = new JTable(modelPlanB);
         UIHelper.styleTable(tB);
@@ -439,18 +433,37 @@ public class StrategyPanel extends JPanel {
         tB.getColumnModel().getColumn(4).setCellRenderer(new UIHelper.RiskBgRenderer());
         tB.getColumnModel().getColumn(6).setCellRenderer(new UIHelper.ProgressBarRenderer());
         panelB.add(new JScrollPane(tB), BorderLayout.CENTER);
-
         lblPlanBCredit = new JLabel("총 학점: -");
         lblPlanBCredit.setFont(UIHelper.FONT_BODY);
         lblPlanBCredit.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
         panelB.add(lblPlanBCredit, BorderLayout.SOUTH);
 
+        // 플랜 C (전공 우선)
+        JPanel panelC = new JPanel(new BorderLayout(0, 4));
+        panelC.setBackground(UIHelper.COLOR_BG);
+        panelC.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(100, 60, 180), 1),
+                "📌 플랜 C — 전공 우선 전략"));
+        JLabel descC = new JLabel("<html><small>전필→전선→교필→교선 순, 각 그룹 내 경쟁률 순<br>장점: 졸업요건 과목 우선 확보 | 단점: 교양 놓칠 수 있음</small></html>");
+        descC.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        panelC.add(descC, BorderLayout.NORTH);
+        modelPlanC = UIHelper.createReadOnlyModel(cols);
+        JTable tC = new JTable(modelPlanC);
+        UIHelper.styleTable(tC);
+        tC.getColumnModel().getColumn(3).setCellRenderer(new UIHelper.RateColorRenderer());
+        tC.getColumnModel().getColumn(4).setCellRenderer(new UIHelper.RiskBgRenderer());
+        tC.getColumnModel().getColumn(6).setCellRenderer(new UIHelper.ProgressBarRenderer());
+        panelC.add(new JScrollPane(tC), BorderLayout.CENTER);
+        lblPlanCCredit = new JLabel("총 학점: -");
+        lblPlanCCredit.setFont(UIHelper.FONT_BODY);
+        lblPlanCCredit.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        panelC.add(lblPlanCCredit, BorderLayout.SOUTH);
+
         JPanel wrap = new JPanel(new BorderLayout());
         wrap.setBackground(UIHelper.COLOR_BG);
         wrap.add(p, BorderLayout.CENTER);
 
-        // 생성 버튼
-        JButton btnGen = UIHelper.createButton("플랜 A/B 생성", UIHelper.COLOR_HEADER, 0, 0, 130, 30);
+        JButton btnGen = UIHelper.createButton("플랜 생성", UIHelper.COLOR_HEADER, 0, 0, 100, 30);
         btnGen.addActionListener(e -> generatePlanAB());
         JPanel south = new JPanel(new FlowLayout(FlowLayout.CENTER));
         south.setBackground(UIHelper.COLOR_BG);
@@ -459,6 +472,7 @@ public class StrategyPanel extends JPanel {
 
         p.add(panelA);
         p.add(panelB);
+        p.add(panelC);
         return wrap;
     }
 
@@ -491,7 +505,21 @@ public class StrategyPanel extends JPanel {
             });
         }
         lblPlanBCredit.setText("총 학점: " + plan.planBCredit + "학점");
+
+        modelPlanC.setRowCount(0);
+        for (int i = 0; i < plan.planC.size(); i++) {
+            Course c = plan.planC.get(i);
+            modelPlanC.addRow(new Object[]{
+                    (i + 1) + "순위", c.getName(), c.getType(),
+                    String.format("%.2f:1", c.getCompetitionRate()),
+                    c.getRiskLevel().getLabel(),
+                    c.getFailureRiskScore() + "점",
+                    c.getSuccessProbability()
+            });
+        }
+        lblPlanCCredit.setText("총 학점: " + plan.planCCredit + "학점");
     }
+
 
     // ──────────────────────────────────────────────
     // 탭 6: 구분별 평균 경쟁률
@@ -530,11 +558,17 @@ public class StrategyPanel extends JPanel {
             double rate = entry.getValue();
             RiskLevel risk = RiskLevel.fromRate(rate);
 
+            // 텍스트 바
+            int filled = (int) Math.min(rate * 4, 20);
+            StringBuilder bar = new StringBuilder("[");
+            for (int i = 0; i < 20; i++) bar.append(i < filled ? "█" : "░");
+            bar.append(String.format("] %.2f:1", rate));
+
             modelAvgRate.addRow(new Object[]{
                     entry.getKey(),
                     String.format("%.2f:1", rate),
                     risk.getLabel(),
-                    String.format("%.2f:1", rate)  // RateBarRenderer가 이 값으로 바를 그려줌
+                    bar.toString()
             });
         }
     }

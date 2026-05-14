@@ -151,8 +151,10 @@ public class StrategyAnalyzer {
     public static class PlanAB {
         public final List<Course> planA;   // 경쟁률 높은 순 (원하는 과목 우선)
         public final List<Course> planB;   // 위험 점수 낮은 순 (안정 전략)
+        public final List<Course> planC;   // 전공 우선 전략 (전공→교양, 각 그룹 내 경쟁률 순)
         public final int planACredit;
         public final int planBCredit;
+        public final int planCCredit;
 
         PlanAB(WishList wishList) {
             planA = new ArrayList<>(wishList.getCourses());
@@ -161,8 +163,25 @@ public class StrategyAnalyzer {
             planB = new ArrayList<>(wishList.getCourses());
             planB.sort(Comparator.comparingInt(Course::getFailureRiskScore));
 
+            // 플랜 C: 전공(전필→전선) 먼저, 교양(교필→교선) 나중
+            // 각 그룹 내에서는 경쟁률 내림차순
+            planC = new ArrayList<>(wishList.getCourses());
+            planC.sort(Comparator
+                    .comparingInt((Course c) -> typeOrder(c.getType()))
+                    .thenComparingDouble(Course::getCompetitionRate).reversed());
+
             planACredit = planA.stream().mapToInt(Course::getCredit).sum();
             planBCredit = planB.stream().mapToInt(Course::getCredit).sum();
+            planCCredit = planC.stream().mapToInt(Course::getCredit).sum();
+        }
+
+        /** 이수구분 우선순위: 전필(0) > 전선(1) > 교필(2) > 교선(3) > 기타(4) */
+        private static int typeOrder(String type) {
+            if (type.equals("전필")) return 0;
+            if (type.equals("전선")) return 1;
+            if (type.equals("교필")) return 2;
+            if (type.equals("교선")) return 3;
+            return 4;
         }
     }
 
