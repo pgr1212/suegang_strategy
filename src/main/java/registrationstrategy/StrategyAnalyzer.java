@@ -11,7 +11,7 @@ import java.util.Map;
  * - 경쟁률 변화 시뮬레이션
  * - 대체 과목 추천
  * - 수강신청 전략 리포트
- * - 플랜 A/B 생성
+ * - 체크박스 기반 맞춤형 플랜 생성
  * - 과목 구분별 평균 경쟁률 비교
  */
 public class StrategyAnalyzer {
@@ -27,10 +27,22 @@ public class StrategyAnalyzer {
     // 1. 수강신청 우선순위 추천
     // ──────────────────────────────────────────────
 
-    /** 경쟁률 내림차순 정렬된 관심 과목 목록 반환 */
+    /**
+     * 다중 기준 우선순위 점수 기준으로 정렬된 관심 과목 목록 반환
+     * 기준:
+     * 1. 우선순위 점수 높은 순
+     * 2. 점수가 같으면 경쟁률 높은 순
+     * 3. 경쟁률도 같으면 학점 높은 순
+     */
     public List<Course> getPriorityList() {
         List<Course> sorted = new ArrayList<>(wishList.getCourses());
-        sorted.sort(Comparator.comparingDouble(Course::getCompetitionRate).reversed());
+
+        sorted.sort(
+                Comparator.comparingInt(Course::getPriorityScore).reversed()
+                        .thenComparing(Comparator.comparingDouble(Course::getCompetitionRate).reversed())
+                        .thenComparing(Comparator.comparingInt(Course::getCredit).reversed())
+        );
+
         return sorted;
     }
 
@@ -61,7 +73,6 @@ public class StrategyAnalyzer {
             this.expectedRisk = RiskLevel.fromRate(expectedRate);
             this.currentScore = course.getFailureRiskScore();
 
-            // 예상 점수 계산
             int tmp;
             if (expectedRate < 0.8)       tmp = 20;
             else if (expectedRate < 1.0)  tmp = 35;
@@ -71,15 +82,15 @@ public class StrategyAnalyzer {
             else                          tmp = 95;
             this.expectedScore = tmp;
 
-            // 분석 메시지
-            if (expectedRisk == RiskLevel.DANGER && currentRisk != RiskLevel.DANGER)
-                analysisMessage = "⚠ 인원이 조금만 늘어나도 '매우 위험' 단계로 올라갑니다. 우선순위를 높이세요.";
-            else if (expectedRisk == RiskLevel.DANGER)
-                analysisMessage = "⚠ 이미 매우 위험 단계이며 경쟁이 더 심해집니다. 가장 먼저 신청하거나 대체 과목을 고려하세요.";
-            else if (expectedRisk == RiskLevel.WARNING)
+            if (expectedRisk == RiskLevel.DANGER && currentRisk != RiskLevel.DANGER) {
+                analysisMessage = "주의: 인원이 조금만 늘어나도 '매우 위험' 단계로 올라갑니다. 우선순위를 높이세요.";
+            } else if (expectedRisk == RiskLevel.DANGER) {
+                analysisMessage = "이미 매우 위험 단계이며 경쟁이 더 심해집니다. 가장 먼저 신청하거나 대체 과목을 고려하세요.";
+            } else if (expectedRisk == RiskLevel.WARNING) {
                 analysisMessage = "주의 단계입니다. 앞쪽 순서로 신청하는 것이 좋습니다.";
-            else
+            } else {
                 analysisMessage = "예상 증가 후에도 비교적 안정적입니다.";
+            }
         }
     }
 
@@ -96,7 +107,7 @@ public class StrategyAnalyzer {
     }
 
     // ──────────────────────────────────────────────
-    // 4. 전략 리포트 데이터 (GUI에서 표시용)
+    // 4. 전략 리포트 데이터
     // ──────────────────────────────────────────────
 
     public static class StrategyReport {
@@ -124,15 +135,31 @@ public class StrategyAnalyzer {
 
             for (Course c : courses) {
                 switch (c.getRiskLevel()) {
-                    case DANGER:  d++; wCourses.add(c); break;
-                    case WARNING: w++; wCourses.add(c); break;
-                    case NORMAL:  n++; break;
-                    default:      r++; break;
+                    case DANGER:
+                        d++;
+                        wCourses.add(c);
+                        break;
+                    case WARNING:
+                        w++;
+                        wCourses.add(c);
+                        break;
+                    case NORMAL:
+                        n++;
+                        break;
+                    default:
+                        r++;
+                        break;
                 }
-                if (mostDangerous == null || c.getCompetitionRate() > mostDangerous.getCompetitionRate())
+
+                if (mostDangerous == null || c.getCompetitionRate() > mostDangerous.getCompetitionRate()) {
                     mostDangerous = c;
+                }
             }
-            dangerCount = d; warningCount = w; normalCount = n; relaxedCount = r;
+
+            dangerCount = d;
+            warningCount = w;
+            normalCount = n;
+            relaxedCount = r;
             mostDangerousCourse = mostDangerous;
             warningCourses = wCourses;
             timeConflicts = wishList.getTimeConflicts();
@@ -145,48 +172,227 @@ public class StrategyAnalyzer {
     }
 
     // ──────────────────────────────────────────────
-    // 5. 플랜 A / B
+    // 5. 체크박스 기반 맞춤형 플랜 생성
     // ──────────────────────────────────────────────
 
-    public static class PlanAB {
-        public final List<Course> planA;   // 경쟁률 높은 순 (원하는 과목 우선)
-        public final List<Course> planB;   // 위험 점수 낮은 순 (안정 전략)
-        public final List<Course> planC;   // 전공 우선 전략 (전공→교양, 각 그룹 내 경쟁률 순)
-        public final int planACredit;
-        public final int planBCredit;
-        public final int planCCredit;
+    /**
+     * 사용자가 체크박스로 선택한 선호 조건
+     */
+    public static class CustomPlanOptions {
+        public final boolean preferMajor;       // 전공 우선
+        public final boolean preferRequired;    // 필수 과목 우선
+        public final boolean preferSafe;        // 안정성 우선
+        public final boolean avoidMorning;      // 오전 수업 피하기
+        public final boolean preferThreeCredit; // 3학점 과목 선호
 
-        PlanAB(WishList wishList) {
-            planA = new ArrayList<>(wishList.getCourses());
-            planA.sort(Comparator.comparingDouble(Course::getCompetitionRate).reversed());
-
-            planB = new ArrayList<>(wishList.getCourses());
-            planB.sort(Comparator.comparingInt(Course::getFailureRiskScore));
-
-            // 플랜 C: 전공(전필→전선) 먼저, 교양(교필→교선) 나중
-            // 각 그룹 내에서는 경쟁률 내림차순
-            planC = new ArrayList<>(wishList.getCourses());
-            planC.sort(Comparator
-                    .comparingInt((Course c) -> typeOrder(c.getType()))
-                    .thenComparingDouble(Course::getCompetitionRate).reversed());
-
-            planACredit = planA.stream().mapToInt(Course::getCredit).sum();
-            planBCredit = planB.stream().mapToInt(Course::getCredit).sum();
-            planCCredit = planC.stream().mapToInt(Course::getCredit).sum();
-        }
-
-        /** 이수구분 우선순위: 전필(0) > 전선(1) > 교필(2) > 교선(3) > 기타(4) */
-        private static int typeOrder(String type) {
-            if (type.equals("전필")) return 0;
-            if (type.equals("전선")) return 1;
-            if (type.equals("교필")) return 2;
-            if (type.equals("교선")) return 3;
-            return 4;
+        public CustomPlanOptions(boolean preferMajor,
+                                 boolean preferRequired,
+                                 boolean preferSafe,
+                                 boolean avoidMorning,
+                                 boolean preferThreeCredit) {
+            this.preferMajor = preferMajor;
+            this.preferRequired = preferRequired;
+            this.preferSafe = preferSafe;
+            this.avoidMorning = avoidMorning;
+            this.preferThreeCredit = preferThreeCredit;
         }
     }
 
-    public PlanAB generatePlanAB() {
-        return new PlanAB(wishList);
+    /**
+     * 선택 조건을 바탕으로 생성되는 3가지 맞춤형 플랜
+     */
+    public static class CustomPlans {
+        public final List<Course> planMain;      // 종합 추천형
+        public final List<Course> planSafe;      // 안정 보완형
+        public final List<Course> planChallenge; // 도전 보완형
+
+        public final int planMainSuccessRate;
+        public final int planSafeSuccessRate;
+        public final int planChallengeSuccessRate;
+
+        public final int planMainCredit;
+        public final int planSafeCredit;
+        public final int planChallengeCredit;
+
+        CustomPlans(WishList wishList, CustomPlanOptions options) {
+            planMain = new ArrayList<>(wishList.getCourses());
+            planSafe = new ArrayList<>(wishList.getCourses());
+            planChallenge = new ArrayList<>(wishList.getCourses());
+
+            planMain.sort(createCustomComparator(options, PlanMode.MAIN));
+
+            planSafe.sort(createCustomComparator(options, PlanMode.SAFE));
+
+            planChallenge.sort(createCustomComparator(options, PlanMode.CHALLENGE));
+
+            planMainSuccessRate = calculatePlanSuccessRate(planMain);
+            planSafeSuccessRate = calculatePlanSuccessRate(planSafe);
+            planChallengeSuccessRate = calculatePlanSuccessRate(planChallenge);
+
+            planMainCredit = planMain.stream().mapToInt(Course::getCredit).sum();
+            planSafeCredit = planSafe.stream().mapToInt(Course::getCredit).sum();
+            planChallengeCredit = planChallenge.stream().mapToInt(Course::getCredit).sum();
+        }
+        private static int calculatePlanSuccessRate(List<Course> courses) {
+            if (courses == null || courses.isEmpty()) {
+                return 0;
+            }
+
+            int totalWeightedSuccess = 0;
+            int totalWeight = 0;
+
+            /*
+             * 플랜 성공률 계산 방식
+             * - 수강신청에서는 앞순서 과목이 더 중요하므로
+             * - 앞에 배치된 과목일수록 더 큰 가중치를 준다.
+             *
+             * 예: 과목이 5개라면
+             * 1순위 가중치 5
+             * 2순위 가중치 4
+             * 3순위 가중치 3
+             * 4순위 가중치 2
+             * 5순위 가중치 1
+             */
+            int size = courses.size();
+
+            for (int i = 0; i < size; i++) {
+                Course c = courses.get(i);
+
+                int weight = size - i;
+                totalWeightedSuccess += c.getSuccessProbability() * weight;
+                totalWeight += weight;
+            }
+
+            return Math.round((float) totalWeightedSuccess / totalWeight);
+        }
+
+        private enum PlanMode {
+            MAIN, SAFE, CHALLENGE
+        }
+        private static Comparator<Course> createCustomComparator(CustomPlanOptions options, PlanMode mode) {
+            Comparator<Course> comparator = (c1, c2) -> {
+                if (options.preferMajor) {
+                    int majorCompare = Integer.compare(
+                            majorFirstOrder(c1.getType()),
+                            majorFirstOrder(c2.getType())
+                    );
+
+                    if (majorCompare != 0) {
+                        return majorCompare;
+                    }
+                }
+
+                if (options.preferRequired) {
+                    int requiredCompare = Integer.compare(
+                            requiredFirstOrder(c1.getType()),
+                            requiredFirstOrder(c2.getType())
+                    );
+
+                    if (requiredCompare != 0) {
+                        return requiredCompare;
+                    }
+                }
+
+                return Integer.compare(
+                        getCustomScore(c2, options, mode),
+                        getCustomScore(c1, options, mode)
+                );
+            };
+
+            if (mode == PlanMode.SAFE) {
+                comparator = comparator
+                        .thenComparing(Comparator.comparingInt(Course::getSuccessProbability).reversed())
+                        .thenComparing(Comparator.comparingDouble(Course::getCompetitionRate));
+            } else {
+                comparator = comparator
+                        .thenComparing(Comparator.comparingDouble(Course::getCompetitionRate).reversed());
+            }
+
+            return comparator;
+        }
+        private static int majorFirstOrder(String type) {
+            if (type == null) {
+                return 2;
+            }
+
+            if (type.startsWith("전")) {
+                return 0; // 전공 먼저
+            }
+
+            if (type.startsWith("교")) {
+                return 1; // 교양 나중
+            }
+
+            return 2;
+        }
+        private static int requiredFirstOrder(String type) {
+            if ("전필".equals(type) || "교필".equals(type)) {
+                return 0;
+            }
+
+            return 1;
+        }
+
+        private static int getCustomScore(Course c, CustomPlanOptions options, PlanMode mode) {
+            int score = 0;
+
+            // 기본 점수: 기존 과목 우선순위 점수 활용
+            score += c.getPriorityScore();
+
+            // 사용자가 선택한 조건 반영
+            if (options.preferMajor && c.getType() != null && c.getType().startsWith("전")) {
+                score += 40;
+            }
+
+            if (options.preferRequired && ("전필".equals(c.getType()) || "교필".equals(c.getType()))) {
+                score += 35;
+            }
+
+            if (options.preferSafe) {
+                score += c.getSuccessProbability();
+
+                if (c.getRiskLevel() == RiskLevel.RELAXED) {
+                    score += 25;
+                } else if (c.getRiskLevel() == RiskLevel.NORMAL) {
+                    score += 15;
+                } else if (c.getRiskLevel() == RiskLevel.DANGER) {
+                    score -= 20;
+                }
+            }
+
+            if (options.avoidMorning && c.getStartPeriod() <= 2) {
+                score -= 30;
+            }
+
+            if (options.preferThreeCredit && c.getCredit() == 3) {
+                score += 20;
+            }
+
+            // 플랜별 보정
+            if (mode == PlanMode.SAFE) {
+                score += c.getSuccessProbability();
+
+                if (c.getRiskLevel() == RiskLevel.RELAXED) {
+                    score += 30;
+                } else if (c.getRiskLevel() == RiskLevel.NORMAL) {
+                    score += 20;
+                } else if (c.getRiskLevel() == RiskLevel.DANGER) {
+                    score -= 30;
+                }
+            } else if (mode == PlanMode.CHALLENGE) {
+                score += (int) (c.getCompetitionRate() * 20);
+
+                if ("전필".equals(c.getType())) {
+                    score += 20;
+                }
+            }
+
+            return score;
+        }
+    }
+
+    public CustomPlans generateCustomPlans(CustomPlanOptions options) {
+        return new CustomPlans(wishList, options);
     }
 
     // ──────────────────────────────────────────────

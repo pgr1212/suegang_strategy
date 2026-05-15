@@ -2,6 +2,7 @@ package registrationstrategy;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.util.List;
 import java.util.Map;
@@ -9,12 +10,11 @@ import java.util.Map;
 /**
  * 전략 분석 탭 패널
  * 탭 구성:
- *   1) 우선순위 추천
- *   2) 경쟁률 시뮬레이션
- *   3) 대체 과목 추천
- *   4) 전략 리포트
- *   5) 플랜 A/B
- *   6) 구분별 평균 경쟁률
+ * 1) 우선순위 추천
+ * 2) 경쟁률 시뮬레이션
+ * 3) 시간표 보기
+ * 4) 전략 리포트
+ * 5) 맞춤형 플랜
  */
 public class StrategyPanel extends JPanel {
 
@@ -22,35 +22,48 @@ public class StrategyPanel extends JPanel {
     private final CourseManager courseManager;
     private final WishList wishList;
 
-    // 탭 패널들
-    private JPanel tabPriority, tabSimulation, tabAlternative, tabReport, tabPlan, tabAvgRate;
-
-    // ── 우선순위 탭 ──
+    // 우선순위 탭
     private DefaultTableModel modelPriority;
 
-    // ── 시뮬레이션 탭 ──
+    // 시뮬레이션 탭
     private JComboBox<String> cbSimCourse;
     private JSpinner spinIncrease;
     private JTextArea txtSimResult;
 
-    // ── 대체 과목 탭 ──
+    // 대체 과목 탭
     private JComboBox<String> cbAltCourse;
     private DefaultTableModel modelAlt;
 
-    // ── 리포트 탭 ──
+    // 시간표 탭
+    private DefaultTableModel modelTimetable;
+    private JTextArea txtTimetableWarning;
+
+    // 리포트 탭
     private JTextArea txtReport;
 
-    // ── 플랜 A/B/C 탭 ──
-    private DefaultTableModel modelPlanA, modelPlanB, modelPlanC;
-    private JLabel lblPlanACredit, lblPlanBCredit, lblPlanCCredit;
+    // 맞춤형 플랜 탭
+    private DefaultTableModel modelPlanMain;
+    private DefaultTableModel modelPlanSafe;
+    private DefaultTableModel modelPlanChallenge;
 
-    // ── 구분별 탭 ──
+    private JLabel lblPlanMainCredit;
+    private JLabel lblPlanSafeCredit;
+    private JLabel lblPlanChallengeCredit;
+
+    private JCheckBox chkPreferMajor;
+    private JCheckBox chkPreferRequired;
+    private JCheckBox chkPreferSafe;
+    private JCheckBox chkAvoidMorning;
+    private JCheckBox chkPreferThreeCredit;
+
+    // 구분별 탭
     private DefaultTableModel modelAvgRate;
 
     public StrategyPanel(CourseManager courseManager, WishList wishList) {
         this.courseManager = courseManager;
         this.wishList = wishList;
         this.analyzer = new StrategyAnalyzer(courseManager, wishList);
+
         setLayout(new BorderLayout());
         setBackground(UIHelper.COLOR_BG);
         buildUI();
@@ -61,12 +74,11 @@ public class StrategyPanel extends JPanel {
         tabs.setFont(UIHelper.FONT_TITLE);
         tabs.setBackground(UIHelper.COLOR_BG);
 
-        tabs.addTab("📊 우선순위 추천",   buildPriorityTab());
-        tabs.addTab("🔮 경쟁률 시뮬레이션", buildSimulationTab());
-        tabs.addTab("🔄 대체 과목 추천",   buildAlternativeTab());
-        tabs.addTab("📋 전략 리포트",       buildReportTab());
-        tabs.addTab("🗂 플랜 A/B",         buildPlanTab());
-        tabs.addTab("📈 구분별 경쟁률",     buildAvgRateTab());
+        tabs.addTab("우선순위 추천", buildPriorityTab());
+        tabs.addTab("경쟁률 시뮬레이션", buildSimulationTab());
+        tabs.addTab("시간표 보기", buildTimetableTab());
+        tabs.addTab("전략 리포트", buildReportTab());
+        tabs.addTab("맞춤형 플랜", buildPlanTab());;
 
         add(tabs, BorderLayout.CENTER);
     }
@@ -74,17 +86,22 @@ public class StrategyPanel extends JPanel {
     // ──────────────────────────────────────────────
     // 탭 1: 우선순위 추천
     // ──────────────────────────────────────────────
+
     private JPanel buildPriorityTab() {
         JPanel p = new JPanel(new BorderLayout(0, 8));
         p.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         p.setBackground(UIHelper.COLOR_BG);
 
-        JLabel desc = new JLabel("경쟁률과 실패 위험 점수가 높은 과목부터 먼저 신청하는 것을 추천합니다.");
+        JLabel desc = new JLabel("경쟁률, 이수구분, 학점, 성공 확률을 종합해 우선순위 점수가 높은 과목부터 추천합니다.");
         desc.setFont(UIHelper.FONT_BODY);
         desc.setForeground(new Color(60, 80, 120));
         p.add(desc, BorderLayout.NORTH);
 
-        String[] cols = {"순위", "과목명", "이수구분", "경쟁률", "위험도", "실패 위험 점수", "성공 확률", "추천 이유"};
+        String[] cols = {
+                "순위", "과목명", "이수구분", "경쟁률", "위험도",
+                "실패 위험 점수", "성공 확률", "우선순위 점수", "추천 이유"
+        };
+
         modelPriority = UIHelper.createReadOnlyModel(cols);
         JTable table = new JTable(modelPriority);
         UIHelper.styleTable(table);
@@ -92,22 +109,31 @@ public class StrategyPanel extends JPanel {
         table.getColumnModel().getColumn(4).setCellRenderer(new UIHelper.RiskBgRenderer());
         table.getColumnModel().getColumn(6).setCellRenderer(new UIHelper.ProgressBarRenderer());
         table.setRowHeight(28);
+
         p.add(new JScrollPane(table), BorderLayout.CENTER);
 
         JButton btnRefresh = UIHelper.createButton("새로고침", UIHelper.COLOR_HEADER, 0, 0, 100, 30);
         btnRefresh.addActionListener(e -> refreshPriority());
+
         JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         south.setBackground(UIHelper.COLOR_BG);
         south.add(btnRefresh);
         p.add(south, BorderLayout.SOUTH);
+
         return p;
     }
 
     public void refreshPriority() {
+        if (modelPriority == null) {
+            return;
+        }
+
         modelPriority.setRowCount(0);
+
         List<Course> list = analyzer.getPriorityList();
         for (int i = 0; i < list.size(); i++) {
             Course c = list.get(i);
+
             modelPriority.addRow(new Object[]{
                     (i + 1) + "순위",
                     c.getName(),
@@ -115,7 +141,8 @@ public class StrategyPanel extends JPanel {
                     String.format("%.2f:1", c.getCompetitionRate()),
                     c.getRiskLevel().getLabel(),
                     c.getFailureRiskScore() + "점",
-                    c.getSuccessProbability(),    // ProgressBarRenderer가 처리
+                    c.getSuccessProbability(),
+                    c.getPriorityScore() + "점",
                     c.getRecommendReason()
             });
         }
@@ -124,12 +151,12 @@ public class StrategyPanel extends JPanel {
     // ──────────────────────────────────────────────
     // 탭 2: 경쟁률 시뮬레이션
     // ──────────────────────────────────────────────
+
     private JPanel buildSimulationTab() {
         JPanel p = new JPanel(new BorderLayout(0, 8));
         p.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         p.setBackground(UIHelper.COLOR_BG);
 
-        // 상단 입력 패널
         JPanel inputPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 4));
         inputPanel.setBackground(UIHelper.COLOR_BG);
         inputPanel.setBorder(BorderFactory.createTitledBorder("시뮬레이션 설정"));
@@ -159,57 +186,73 @@ public class StrategyPanel extends JPanel {
         txtSimResult.setMargin(new Insets(10, 12, 10, 12));
         txtSimResult.setLineWrap(true);
         txtSimResult.setWrapStyleWord(true);
+
         p.add(new JScrollPane(txtSimResult), BorderLayout.CENTER);
 
         btnRun.addActionListener(e -> runSimulation());
+
         return p;
     }
 
     private void runSimulation() {
         String selected = (String) cbSimCourse.getSelectedItem();
-        if (selected == null) { showMsg("과목을 먼저 선택하세요."); return; }
+
+        if (selected == null) {
+            showMsg("과목을 먼저 선택하세요.");
+            return;
+        }
+
         int id = Integer.parseInt(selected.split("\\.")[0].trim());
         Course course = courseManager.findById(id);
-        if (course == null) { showMsg("과목을 찾을 수 없습니다."); return; }
+
+        if (course == null) {
+            showMsg("과목을 찾을 수 없습니다.");
+            return;
+        }
 
         int increase = (Integer) spinIncrease.getValue();
         StrategyAnalyzer.SimulationResult r = analyzer.simulate(course, increase);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("═══════════════ 경쟁률 변화 시뮬레이션 결과 ═══════════════\n\n");
-        sb.append(String.format("  과목명        : %s\n", r.course.getName()));
-        sb.append(String.format("  정원          : %d명\n", r.course.getCapacity()));
-        sb.append(String.format("  현재 담은 인원: %d명\n", r.course.getSavedCount()));
-        sb.append(String.format("  예상 증가 인원: +%d명\n", r.expectedIncrease));
-        sb.append(String.format("  예상 담은 인원: %d명\n\n", r.expectedSavedCount));
-        sb.append(String.format("  현재 경쟁률   : %.2f:1  (%s, 위험점수 %d점, 성공확률 %d%%)\n",
+        sb.append("[ 경쟁률 변화 시뮬레이션 결과 ]\n\n");
+        sb.append(String.format("과목명        : %s\n", r.course.getName()));
+        sb.append(String.format("정원          : %d명\n", r.course.getCapacity()));
+        sb.append(String.format("현재 담은 인원: %d명\n", r.course.getSavedCount()));
+        sb.append(String.format("예상 증가 인원: +%d명\n", r.expectedIncrease));
+        sb.append(String.format("예상 담은 인원: %d명\n\n", r.expectedSavedCount));
+
+        sb.append(String.format("현재 경쟁률   : %.2f:1  (%s, 위험점수 %d점, 성공확률 %d%%)\n",
                 r.currentRate, r.currentRisk.getLabel(), r.currentScore, 100 - r.currentScore));
-        sb.append(String.format("  예상 경쟁률   : %.2f:1  (%s, 위험점수 %d점, 성공확률 %d%%)\n\n",
+
+        sb.append(String.format("예상 경쟁률   : %.2f:1  (%s, 위험점수 %d점, 성공확률 %d%%)\n\n",
                 r.expectedRate, r.expectedRisk.getLabel(), r.expectedScore, 100 - r.expectedScore));
 
-        // 위험도 변화 화살표
-        sb.append(String.format("  위험도 변화   : [%s]  →  [%s]\n\n",
+        sb.append(String.format("위험도 변화   : [%s] -> [%s]\n\n",
                 r.currentRisk.getLabel(), r.expectedRisk.getLabel()));
 
-        // 경쟁률 바 비교
-        int curFilled = (int) Math.min(r.currentRate * 4, 20);
-        int expFilled = (int) Math.min(r.expectedRate * 4, 20);
-        sb.append("  현재  [");
-        for (int i = 0; i < 20; i++) sb.append(i < curFilled ? "█" : "░");
-        sb.append(String.format("] %.2f:1\n", r.currentRate));
-        sb.append("  예상  [");
-        for (int i = 0; i < 20; i++) sb.append(i < expFilled ? "█" : "░");
-        sb.append(String.format("] %.2f:1\n\n", r.expectedRate));
+        sb.append("현재  ").append(makeTextBar(r.currentRate)).append(String.format(" %.2f:1\n", r.currentRate));
+        sb.append("예상  ").append(makeTextBar(r.expectedRate)).append(String.format(" %.2f:1\n\n", r.expectedRate));
 
-        sb.append("  ▶ 분석: ").append(r.analysisMessage).append("\n");
-        sb.append("═══════════════════════════════════════════════════════════");
+        sb.append("분석: ").append(r.analysisMessage).append("\n");
 
         txtSimResult.setText(sb.toString());
+        txtSimResult.setCaretPosition(0);
+    }
+
+    private String makeTextBar(double rate) {
+        int filled = (int) Math.min(rate * 4, 20);
+        StringBuilder bar = new StringBuilder("[");
+        for (int i = 0; i < 20; i++) {
+            bar.append(i < filled ? "#" : "-");
+        }
+        bar.append("]");
+        return bar.toString();
     }
 
     // ──────────────────────────────────────────────
     // 탭 3: 대체 과목 추천
     // ──────────────────────────────────────────────
+
     private JPanel buildAlternativeTab() {
         JPanel p = new JPanel(new BorderLayout(0, 8));
         p.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -224,56 +267,220 @@ public class StrategyPanel extends JPanel {
         cbAltCourse.setPreferredSize(new Dimension(220, 26));
 
         JButton btnFind = UIHelper.createButton("대체 과목 찾기", new Color(80, 130, 60), 0, 0, 130, 28);
+
         top.add(new JLabel("위험 과목:"));
         top.add(cbAltCourse);
         top.add(btnFind);
-        top.add(new JLabel("  ※ 같은 이수구분 + 낮은 경쟁률 + 시간 충돌 없음 기준"));
+        top.add(new JLabel("  ※ 같은 이수구분/분야, 낮은 경쟁률, 유사 학점, 시간 충돌 없음 기준"));
+
         p.add(top, BorderLayout.NORTH);
 
-        String[] cols = {"과목명", "이수구분", "교수", "경쟁률", "위험도", "성공 확률", "강의시간", "추천 이유"};
+        String[] cols = {"과목명", "이수구분", "분야", "학점", "경쟁률", "위험도", "성공 확률", "추천 이유"};
         modelAlt = UIHelper.createReadOnlyModel(cols);
+
         JTable table = new JTable(modelAlt);
         UIHelper.styleTable(table);
-        table.getColumnModel().getColumn(3).setCellRenderer(new UIHelper.RateColorRenderer());
-        table.getColumnModel().getColumn(4).setCellRenderer(new UIHelper.RiskBgRenderer());
-        table.getColumnModel().getColumn(5).setCellRenderer(new UIHelper.ProgressBarRenderer());
+        table.getColumnModel().getColumn(4).setCellRenderer(new UIHelper.RateColorRenderer());
+        table.getColumnModel().getColumn(5).setCellRenderer(new UIHelper.RiskBgRenderer());
+        table.getColumnModel().getColumn(6).setCellRenderer(new UIHelper.ProgressBarRenderer());
         table.setRowHeight(28);
+
         p.add(new JScrollPane(table), BorderLayout.CENTER);
 
         btnFind.addActionListener(e -> runAlternativeSearch());
+
         return p;
     }
 
     private void runAlternativeSearch() {
         String selected = (String) cbAltCourse.getSelectedItem();
-        if (selected == null) { showMsg("과목을 선택하세요."); return; }
+
+        if (selected == null) {
+            showMsg("과목을 선택하세요.");
+            return;
+        }
+
         int id = Integer.parseInt(selected.split("\\.")[0].trim());
         Course target = courseManager.findById(id);
-        if (target == null) { showMsg("과목을 찾을 수 없습니다."); return; }
+
+        if (target == null) {
+            showMsg("과목을 찾을 수 없습니다.");
+            return;
+        }
 
         List<Course> alts = analyzer.getAlternatives(target);
         modelAlt.setRowCount(0);
+
         if (alts.isEmpty()) {
             JOptionPane.showMessageDialog(this,
-                    "조건에 맞는 대체 과목이 없습니다.\n(같은 이수구분 + 낮은 경쟁률 + 시간 충돌 없음)",
-                    "대체 과목 없음", JOptionPane.INFORMATION_MESSAGE);
+                    "조건에 맞는 대체 과목이 없습니다.\n(같은 이수구분/분야, 낮은 경쟁률, 유사 학점, 시간 충돌 없음 기준)",
+                    "대체 과목 없음",
+                    JOptionPane.INFORMATION_MESSAGE);
             return;
         }
+
         for (Course c : alts) {
             modelAlt.addRow(new Object[]{
-                    c.getName(), c.getType(), c.getProfessor(),
+                    c.getName(),
+                    c.getType(),
+                    c.getCategory(),
+                    c.getCredit() + "학점",
                     String.format("%.2f:1", c.getCompetitionRate()),
                     c.getRiskLevel().getLabel(),
                     c.getSuccessProbability(),
-                    c.getTimeString(),
-                    "같은 이수구분, 낮은 경쟁률, 시간 충돌 없음"
+                    getAlternativeReason(target, c)
             });
         }
     }
 
     // ──────────────────────────────────────────────
-    // 탭 4: 전략 리포트
+    // 탭 4: 시간표 보기
     // ──────────────────────────────────────────────
+
+    private JPanel buildTimetableTab() {
+        JPanel p = new JPanel(new BorderLayout(0, 8));
+        p.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        p.setBackground(UIHelper.COLOR_BG);
+
+        JLabel desc = new JLabel("관심 과목 목록을 월~금 / 1~8교시 시간표 형태로 보여줍니다.");
+        desc.setFont(UIHelper.FONT_BODY);
+        desc.setForeground(new Color(60, 80, 120));
+        p.add(desc, BorderLayout.NORTH);
+
+        String[] cols = {"교시", "월", "화", "수", "목", "금"};
+        modelTimetable = UIHelper.createReadOnlyModel(cols);
+
+        JTable table = new JTable(modelTimetable);
+        UIHelper.styleTable(table);
+        table.setRowHeight(90);
+
+        table.getColumnModel().getColumn(0).setPreferredWidth(60);
+
+        for (int i = 1; i < table.getColumnCount(); i++) {
+            table.getColumnModel().getColumn(i).setPreferredWidth(160);
+            table.getColumnModel().getColumn(i).setCellRenderer(new MultiLineCellRenderer());
+        }
+
+        p.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        JPanel bottom = new JPanel(new BorderLayout(8, 8));
+        bottom.setBackground(UIHelper.COLOR_BG);
+
+        txtTimetableWarning = new JTextArea(3, 20);
+        txtTimetableWarning.setEditable(false);
+        txtTimetableWarning.setLineWrap(true);
+        txtTimetableWarning.setWrapStyleWord(true);
+        txtTimetableWarning.setFont(UIHelper.FONT_BODY);
+        txtTimetableWarning.setBackground(new Color(255, 248, 230));
+        txtTimetableWarning.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        JButton btnRefresh = new JButton("시간표 새로고침");
+        btnRefresh.setFont(UIHelper.FONT_BODY);
+        btnRefresh.setFocusPainted(false);
+        btnRefresh.setBackground(new Color(37, 99, 168));
+        btnRefresh.setForeground(Color.BLACK);
+        btnRefresh.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
+        btnRefresh.addActionListener(e -> refreshTimetable());
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.setBackground(UIHelper.COLOR_BG);
+        btnPanel.add(btnRefresh);
+
+        bottom.add(txtTimetableWarning, BorderLayout.CENTER);
+        bottom.add(btnPanel, BorderLayout.EAST);
+
+        p.add(bottom, BorderLayout.SOUTH);
+
+        refreshTimetable();
+
+        return p;
+    }
+
+    private void refreshTimetable() {
+        if (modelTimetable == null) {
+            return;
+        }
+
+        modelTimetable.setRowCount(0);
+
+        String[] days = {"월", "화", "수", "목", "금"};
+        TimetableCell[][] cells = new TimetableCell[8][5];
+
+        for (Course c : wishList.getCourses()) {
+            String day = c.getDay();
+
+            int dayIndex = -1;
+            for (int i = 0; i < days.length; i++) {
+                if (days[i].equals(day)) {
+                    dayIndex = i;
+                    break;
+                }
+            }
+
+            if (dayIndex == -1) {
+                continue;
+            }
+
+            int start = c.getStartPeriod();
+            int end = c.getEndPeriod();
+
+            for (int period = start; period <= end; period++) {
+                if (period < 1 || period > 8) {
+                    continue;
+                }
+
+                String text = c.getName()
+                        + "\n" + c.getProfessor()
+                        + "\n" + c.getRoom()
+                        + "\n" + c.getRiskLevel().getLabel();
+
+                int row = period - 1;
+
+                if (cells[row][dayIndex] == null) {
+                    cells[row][dayIndex] = new TimetableCell(text, c.getRiskLevel());
+                } else {
+                    String mergedText = cells[row][dayIndex].getText()
+                            + "\n----------\n"
+                            + text;
+
+                    cells[row][dayIndex] = new TimetableCell(mergedText, RiskLevel.DANGER);
+                }
+            }
+        }
+
+        for (int period = 1; period <= 8; period++) {
+            modelTimetable.addRow(new Object[]{
+                    period + "교시",
+                    cells[period - 1][0] == null ? "" : cells[period - 1][0],
+                    cells[period - 1][1] == null ? "" : cells[period - 1][1],
+                    cells[period - 1][2] == null ? "" : cells[period - 1][2],
+                    cells[period - 1][3] == null ? "" : cells[period - 1][3],
+                    cells[period - 1][4] == null ? "" : cells[period - 1][4]
+            });
+        }
+
+        if (txtTimetableWarning != null) {
+            List<String> conflicts = wishList.getTimeConflicts();
+
+            if (conflicts.isEmpty()) {
+                txtTimetableWarning.setText("시간표 충돌 과목이 없습니다.");
+            } else {
+                StringBuilder sb = new StringBuilder();
+                sb.append("시간표 충돌 과목:\n");
+
+                for (String conflict : conflicts) {
+                    sb.append("- ").append(conflict).append("\n");
+                }
+
+                txtTimetableWarning.setText(sb.toString());
+            }
+        }
+    }
+
+    // ──────────────────────────────────────────────
+    // 탭 5: 전략 리포트
+    // ──────────────────────────────────────────────
+
     private JPanel buildReportTab() {
         JPanel p = new JPanel(new BorderLayout(0, 8));
         p.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -285,97 +492,276 @@ public class StrategyPanel extends JPanel {
         txtReport.setMargin(new Insets(10, 12, 10, 12));
         txtReport.setLineWrap(true);
         txtReport.setWrapStyleWord(true);
+
         p.add(new JScrollPane(txtReport), BorderLayout.CENTER);
 
         JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         south.setBackground(UIHelper.COLOR_BG);
+
         JButton btnGen = UIHelper.createButton("리포트 생성", UIHelper.COLOR_HEADER, 0, 0, 120, 30);
         JButton btnSave = UIHelper.createButton("파일 저장", new Color(80, 130, 60), 0, 0, 100, 30);
+
         south.add(btnSave);
         south.add(btnGen);
+
         p.add(south, BorderLayout.SOUTH);
 
         btnGen.addActionListener(e -> generateReport());
         btnSave.addActionListener(e -> saveReport());
+
         return p;
     }
 
     private void generateReport() {
-        if (wishList.isEmpty()) { showMsg("관심 과목을 먼저 담아주세요."); return; }
+        if (wishList.isEmpty()) {
+            showMsg("관심 과목을 먼저 담아주세요.");
+            return;
+        }
+
         StrategyAnalyzer.StrategyReport r = analyzer.generateReport();
+        List<Course> priorityList = analyzer.getPriorityList();
+
         StringBuilder sb = new StringBuilder();
 
-        sb.append("╔══════════════════════════════════════════════════════╗\n");
-        sb.append("║          수강신청 전략 리포트                        ║\n");
-        sb.append("╚══════════════════════════════════════════════════════╝\n\n");
+        sb.append("==================================================\n");
+        sb.append("              수강신청 전략 리포트\n");
+        sb.append("==================================================\n\n");
 
-        sb.append(String.format("  총 관심 과목 : %d개\n", r.totalCount));
-        sb.append(String.format("  총 학점      : %d학점\n", r.totalCredit));
-        sb.append(String.format("  학점 상태    : %s\n\n", r.creditStatus));
+        sb.append("[ 기본 요약 ]\n");
+        sb.append(String.format("총 관심 과목 : %d개\n", r.totalCount));
+        sb.append(String.format("총 학점 : %d학점\n", r.totalCredit));
+        sb.append(String.format("학점 상태 : %s\n\n", r.creditStatus));
 
-        sb.append("──────────────── 위험도 요약 ────────────────\n");
-        sb.append(String.format("  🔴 매우 위험 : %d개\n", r.dangerCount));
-        sb.append(String.format("  🟠 주의      : %d개\n", r.warningCount));
-        sb.append(String.format("  🟢 보통      : %d개\n", r.normalCount));
-        sb.append(String.format("  🔵 여유      : %d개\n\n", r.relaxedCount));
+        sb.append("[ 위험도 요약 ]\n");
+        sb.append(String.format("매우 위험 : %d개\n", r.dangerCount));
+        sb.append(String.format("주의 : %d개\n", r.warningCount));
+        sb.append(String.format("보통 : %d개\n", r.normalCount));
+        sb.append(String.format("여유 : %d개\n\n", r.relaxedCount));
+
+        appendTopPriorityCourses(sb, priorityList);
 
         if (r.mostDangerousCourse != null) {
-            sb.append("──────────── 가장 먼저 신청할 과목 ────────────\n");
-            sb.append(String.format("  ★ %s\n", r.mostDangerousCourse.getName()));
-            sb.append(String.format("     경쟁률: %.2f:1  |  위험도: %s  |  위험점수: %d점  |  성공확률: %d%%\n\n",
+            sb.append("[ 가장 먼저 신청할 과목 ]\n");
+            sb.append(String.format("- %s\n", r.mostDangerousCourse.getName()));
+            sb.append(String.format(
+                    "경쟁률: %.2f:1 | 위험도: %s | 위험점수: %d점 | 성공확률: %d%%\n",
                     r.mostDangerousCourse.getCompetitionRate(),
                     r.mostDangerousCourse.getRiskLevel().getLabel(),
                     r.mostDangerousCourse.getFailureRiskScore(),
-                    r.mostDangerousCourse.getSuccessProbability()));
+                    r.mostDangerousCourse.getSuccessProbability()
+            ));
+            sb.append("분석: 가장 먼저 신청해야 하는 핵심 과목입니다.\n\n");
         }
 
         if (!r.warningCourses.isEmpty()) {
-            sb.append("──────────────── 주의가 필요한 과목 ────────────────\n");
+            sb.append("[ 주의가 필요한 과목 ]\n");
+
             for (Course c : r.warningCourses) {
-                sb.append(String.format("  • %s  /  %.2f:1  /  %s  /  성공확률 %d%%\n",
-                        c.getName(), c.getCompetitionRate(),
-                        c.getRiskLevel().getLabel(), c.getSuccessProbability()));
-
-                // 경쟁률 바
-                sb.append("    ").append(c.getRateBar()).append("\n");
+                sb.append(String.format(
+                        "- %s / %.2f:1 / %s / 성공확률 %d%%\n",
+                        c.getName(),
+                        c.getCompetitionRate(),
+                        c.getRiskLevel().getLabel(),
+                        c.getSuccessProbability()
+                ));
             }
+
             sb.append("\n");
         }
 
-        sb.append("──────────────── 전략 제안 ────────────────\n");
-        sb.append("  1. 매우 위험 과목을 가장 먼저 신청하세요.\n");
-        sb.append("  2. 주의 과목은 두 번째 그룹으로 신청하세요.\n");
-        sb.append("  3. 보통 과목은 중간 순서로 신청하세요.\n");
-        sb.append("  4. 여유 과목은 마지막에 신청해도 비교적 안전합니다.\n");
-        sb.append("  5. 위험 과목 신청 실패에 대비해 대체 과목을 확인하세요.\n\n");
+        appendTypeAnalysis(sb);
+        appendAlternativeSummary(sb, priorityList);
 
-        // 시간표 충돌
-        sb.append("──────────────── 시간표 충돌 확인 ────────────────\n");
+        sb.append("[ 시간표 충돌 확인 ]\n");
         if (r.timeConflicts.isEmpty()) {
-            sb.append("  ✔ 시간표 충돌이 없습니다.\n\n");
+            sb.append("시간표 충돌이 없습니다.\n\n");
         } else {
-            for (String conflict : r.timeConflicts)
-                sb.append("  ⚠ 충돌: ").append(conflict).append("\n");
-            sb.append("\n");
+            for (String conflict : r.timeConflicts) {
+                sb.append("- 충돌: ").append(conflict).append("\n");
+            }
+            sb.append("분석: 충돌 과목이 있으므로 둘 중 하나를 삭제하거나 대체 과목으로 변경해야 합니다.\n\n");
         }
 
-        // 학점 구성 경고
         if (!r.compositionWarnings.isEmpty()) {
-            sb.append("──────────────── 학점 구성 경고 ────────────────\n");
-            for (String w : r.compositionWarnings)
-                sb.append("  ⚠ ").append(w).append("\n");
+            sb.append("[ 학점 구성 경고 ]\n");
+
+            for (String w : r.compositionWarnings) {
+                sb.append("- ").append(w).append("\n");
+            }
+
             sb.append("\n");
         }
 
-        sb.append("═══════════════════════════════════════════════════════");
+        sb.append("[ 맞춤형 플랜 안내 ]\n");
+        sb.append("맞춤형 플랜은 사용자가 선택한 조건을 바탕으로 3가지 신청 순서를 생성합니다.\n");
+        sb.append("추천 플랜 1 - 종합 추천형: 선택 조건을 전체적으로 반영한 기본 추천안입니다.\n");
+        sb.append("추천 플랜 2 - 안정 보완형: 선택 조건을 유지하면서 성공 가능성이 높은 과목을 더 앞에 둡니다.\n");
+        sb.append("추천 플랜 3 - 도전 보완형: 선택 조건을 유지하면서 경쟁률이 높은 과목을 더 앞에 둡니다.\n\n");
+
+        sb.append("[ 세부 전략 제안 ]\n");
+        sb.append("1. 매우 위험 과목은 수강신청 시작 직후 가장 먼저 신청하세요.\n");
+        sb.append("2. 주의 과목은 두 번째 그룹으로 신청하세요.\n");
+        sb.append("3. 전공필수 또는 교양필수 과목은 경쟁률이 낮더라도 우선순위를 높게 두세요.\n");
+        sb.append("4. 실패 가능성이 높은 과목은 반드시 대체 과목을 미리 정해두세요.\n");
+        sb.append("5. 시간표 충돌이 있는 경우 신청 전 관심 과목 목록을 정리하세요.\n");
+        sb.append("6. 여유 과목은 마지막 순서로 신청해도 비교적 안전합니다.\n\n");
+
+        appendFinalStrategy(sb, r, priorityList);
+
+        sb.append("\n[ 리포트 끝 ]\n");
+
         txtReport.setText(sb.toString());
         txtReport.setCaretPosition(0);
     }
 
+    private void appendTopPriorityCourses(StringBuilder sb, List<Course> priorityList) {
+        sb.append("[ 최종 추천 신청 순서 TOP 5 ]\n");
+
+        if (priorityList.isEmpty()) {
+            sb.append("관심 과목이 없습니다.\n\n");
+            return;
+        }
+
+        int limit = Math.min(5, priorityList.size());
+
+        for (int i = 0; i < limit; i++) {
+            Course c = priorityList.get(i);
+
+            sb.append(String.format("%d순위. %s [%s]\n", i + 1, c.getName(), c.getType()));
+            sb.append(String.format(
+                    "   경쟁률 %.2f:1 | 위험도 %s | 성공확률 %d%% | %s\n",
+                    c.getCompetitionRate(),
+                    c.getRiskLevel().getLabel(),
+                    c.getSuccessProbability(),
+                    c.getRecommendReason()
+            ));
+        }
+
+        sb.append("\n");
+    }
+
+    private void appendTypeAnalysis(StringBuilder sb) {
+        int majorCount = 0;
+        int liberalCount = 0;
+        int majorCredit = 0;
+        int liberalCredit = 0;
+
+        for (Course c : wishList.getCourses()) {
+            if (c.getType().startsWith("전")) {
+                majorCount++;
+                majorCredit += c.getCredit();
+            } else if (c.getType().startsWith("교")) {
+                liberalCount++;
+                liberalCredit += c.getCredit();
+            }
+        }
+
+        sb.append("[ 전공/교양 구성 분석 ]\n");
+        sb.append(String.format("전공 과목 : %d개 / %d학점\n", majorCount, majorCredit));
+        sb.append(String.format("교양 과목 : %d개 / %d학점\n", liberalCount, liberalCredit));
+
+        if (majorCredit > liberalCredit) {
+            sb.append("분석: 전공 중심 시간표입니다. 전공 과목 실패에 대비한 대체 과목 확인이 중요합니다.\n");
+        } else if (liberalCredit > majorCredit) {
+            sb.append("분석: 교양 비중이 높은 시간표입니다. 졸업요건상 전공 학점이 부족하지 않은지 확인하세요.\n");
+        } else {
+            sb.append("분석: 전공과 교양 학점 비율이 비교적 균형적입니다.\n");
+        }
+
+        sb.append("\n");
+    }
+
+    private void appendAlternativeSummary(StringBuilder sb, List<Course> priorityList) {
+        sb.append("[ 위험 과목별 대체 과목 추천 ]\n");
+
+        boolean hasDangerCourse = false;
+
+        for (Course target : priorityList) {
+            if (target.getRiskLevel() != RiskLevel.DANGER
+                    && target.getRiskLevel() != RiskLevel.WARNING) {
+                continue;
+            }
+
+            hasDangerCourse = true;
+
+            sb.append(String.format(
+                    "[%s] %.2f:1 / %s\n",
+                    target.getName(),
+                    target.getCompetitionRate(),
+                    target.getRiskLevel().getLabel()
+            ));
+
+            List<Course> alternatives = analyzer.getAlternatives(target);
+
+            if (alternatives.isEmpty()) {
+                sb.append("   -> 조건에 맞는 대체 과목이 없습니다. 수동으로 추가 후보를 확인하세요.\n");
+            } else {
+                int limit = Math.min(3, alternatives.size());
+
+                for (int i = 0; i < limit; i++) {
+                    Course alt = alternatives.get(i);
+
+                    sb.append(String.format(
+                            "   -> 대체 %d: %s / %.2f:1 / %s / %s\n",
+                            i + 1,
+                            alt.getName(),
+                            alt.getCompetitionRate(),
+                            alt.getRiskLevel().getLabel(),
+                            alt.getTimeString()
+                    ));
+                }
+            }
+
+            sb.append("\n");
+        }
+
+        if (!hasDangerCourse) {
+            sb.append("위험 또는 주의 과목이 없어 별도 대체 과목 추천이 필요하지 않습니다.\n\n");
+        }
+    }
+
+    private void appendFinalStrategy(StringBuilder sb, StrategyAnalyzer.StrategyReport r, List<Course> priorityList) {
+        sb.append("[ 최종 전략 요약 ]\n");
+
+        if (priorityList.isEmpty()) {
+            sb.append("관심 과목이 없어 전략을 생성할 수 없습니다.\n");
+            return;
+        }
+
+        Course first = priorityList.get(0);
+
+        if (r.dangerCount > 0) {
+            sb.append(String.format(
+                    "최종 전략: '%s'처럼 경쟁률이 매우 높은 과목을 1순위로 신청하고, 실패에 대비해 대체 과목을 함께 준비하는 전략이 필요합니다.\n",
+                    first.getName()
+            ));
+        } else if (r.warningCount > 0) {
+            sb.append(String.format(
+                    "최종 전략: '%s'를 포함한 주의 과목을 먼저 신청한 뒤, 보통/여유 과목은 뒤쪽 순서로 배치하는 것이 좋습니다.\n",
+                    first.getName()
+            ));
+        } else {
+            sb.append("최종 전략: 전체적으로 안정적인 시간표입니다. 다만 필수 과목과 시간표 충돌 여부를 마지막으로 확인하세요.\n");
+        }
+
+        if (!r.timeConflicts.isEmpty()) {
+            sb.append("추가 주의: 시간표 충돌이 있으므로 신청 전 충돌 과목 중 하나를 제거하거나 대체 과목으로 바꾸는 것이 좋습니다.\n");
+        }
+
+        if (!r.compositionWarnings.isEmpty()) {
+            sb.append("추가 주의: 학점 구성 경고가 있으므로 총 학점과 이수구분 비율을 다시 확인하세요.\n");
+        }
+    }
+
     private void saveReport() {
-        if (txtReport.getText().isEmpty()) { showMsg("먼저 리포트를 생성하세요."); return; }
+        if (txtReport.getText().isEmpty()) {
+            showMsg("먼저 리포트를 생성하세요.");
+            return;
+        }
+
         JFileChooser fc = new JFileChooser();
         fc.setSelectedFile(new java.io.File("수강신청_전략_리포트.txt"));
+
         if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             try (java.io.FileWriter fw = new java.io.FileWriter(fc.getSelectedFile())) {
                 fw.write(txtReport.getText());
@@ -387,143 +773,210 @@ public class StrategyPanel extends JPanel {
     }
 
     // ──────────────────────────────────────────────
-    // 탭 5: 플랜 A/B/C
+    // 탭 6: 맞춤형 플랜
     // ──────────────────────────────────────────────
+
     private JPanel buildPlanTab() {
-        JPanel p = new JPanel(new GridLayout(1, 3, 8, 0));
-        p.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        p.setBackground(UIHelper.COLOR_BG);
+        JPanel root = new JPanel(new BorderLayout(0, 10));
+        root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        root.setBackground(UIHelper.COLOR_BG);
 
-        String[] cols = {"순위", "과목명", "이수구분", "경쟁률", "위험도", "위험점수", "성공확률"};
+        JPanel optionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 6));
+        optionPanel.setBackground(UIHelper.COLOR_BG);
+        optionPanel.setBorder(BorderFactory.createTitledBorder("맞춤형 플랜 조건 선택"));
 
-        // 플랜 A
-        JPanel panelA = new JPanel(new BorderLayout(0, 4));
-        panelA.setBackground(UIHelper.COLOR_BG);
-        panelA.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(UIHelper.COLOR_DANGER, 1),
-                "📌 플랜 A — 공격적 전략"));
-        JLabel descA = new JLabel("<html><small>경쟁률 높은 순 — 인기 과목 우선<br>장점: 원하는 과목 시도 | 단점: 실패 위험 높음</small></html>");
-        descA.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        panelA.add(descA, BorderLayout.NORTH);
-        modelPlanA = UIHelper.createReadOnlyModel(cols);
-        JTable tA = new JTable(modelPlanA);
-        UIHelper.styleTable(tA);
-        tA.getColumnModel().getColumn(3).setCellRenderer(new UIHelper.RateColorRenderer());
-        tA.getColumnModel().getColumn(4).setCellRenderer(new UIHelper.RiskBgRenderer());
-        tA.getColumnModel().getColumn(6).setCellRenderer(new UIHelper.ProgressBarRenderer());
-        panelA.add(new JScrollPane(tA), BorderLayout.CENTER);
-        lblPlanACredit = new JLabel("총 학점: -");
-        lblPlanACredit.setFont(UIHelper.FONT_BODY);
-        lblPlanACredit.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        panelA.add(lblPlanACredit, BorderLayout.SOUTH);
+        chkPreferMajor = new JCheckBox("전공 우선");
+        chkPreferRequired = new JCheckBox("필수 과목 우선");
+        chkPreferSafe = new JCheckBox("안정성 우선");
+        chkAvoidMorning = new JCheckBox("오전 수업 피하기");
+        chkPreferThreeCredit = new JCheckBox("3학점 과목 선호");
 
-        // 플랜 B
-        JPanel panelB = new JPanel(new BorderLayout(0, 4));
-        panelB.setBackground(UIHelper.COLOR_BG);
-        panelB.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(UIHelper.COLOR_RELAXED, 1),
-                "📌 플랜 B — 안정적 전략"));
-        JLabel descB = new JLabel("<html><small>위험점수 낮은 순 — 성공률 우선<br>장점: 전체 성공 가능성 높음 | 단점: 인기 과목 놓칠 수 있음</small></html>");
-        descB.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        panelB.add(descB, BorderLayout.NORTH);
-        modelPlanB = UIHelper.createReadOnlyModel(cols);
-        JTable tB = new JTable(modelPlanB);
-        UIHelper.styleTable(tB);
-        tB.getColumnModel().getColumn(3).setCellRenderer(new UIHelper.RateColorRenderer());
-        tB.getColumnModel().getColumn(4).setCellRenderer(new UIHelper.RiskBgRenderer());
-        tB.getColumnModel().getColumn(6).setCellRenderer(new UIHelper.ProgressBarRenderer());
-        panelB.add(new JScrollPane(tB), BorderLayout.CENTER);
-        lblPlanBCredit = new JLabel("총 학점: -");
-        lblPlanBCredit.setFont(UIHelper.FONT_BODY);
-        lblPlanBCredit.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        panelB.add(lblPlanBCredit, BorderLayout.SOUTH);
+        JCheckBox[] checks = {
+                chkPreferMajor,
+                chkPreferRequired,
+                chkPreferSafe,
+                chkAvoidMorning,
+                chkPreferThreeCredit
+        };
 
-        // 플랜 C (전공 우선)
-        JPanel panelC = new JPanel(new BorderLayout(0, 4));
-        panelC.setBackground(UIHelper.COLOR_BG);
-        panelC.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(100, 60, 180), 1),
-                "📌 플랜 C — 전공 우선 전략"));
-        JLabel descC = new JLabel("<html><small>전필→전선→교필→교선 순, 각 그룹 내 경쟁률 순<br>장점: 졸업요건 과목 우선 확보 | 단점: 교양 놓칠 수 있음</small></html>");
-        descC.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        panelC.add(descC, BorderLayout.NORTH);
-        modelPlanC = UIHelper.createReadOnlyModel(cols);
-        JTable tC = new JTable(modelPlanC);
-        UIHelper.styleTable(tC);
-        tC.getColumnModel().getColumn(3).setCellRenderer(new UIHelper.RateColorRenderer());
-        tC.getColumnModel().getColumn(4).setCellRenderer(new UIHelper.RiskBgRenderer());
-        tC.getColumnModel().getColumn(6).setCellRenderer(new UIHelper.ProgressBarRenderer());
-        panelC.add(new JScrollPane(tC), BorderLayout.CENTER);
-        lblPlanCCredit = new JLabel("총 학점: -");
-        lblPlanCCredit.setFont(UIHelper.FONT_BODY);
-        lblPlanCCredit.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        panelC.add(lblPlanCCredit, BorderLayout.SOUTH);
+        for (JCheckBox chk : checks) {
+            chk.setFont(UIHelper.FONT_BODY);
+            chk.setBackground(UIHelper.COLOR_BG);
+            optionPanel.add(chk);
+        }
 
-        JPanel wrap = new JPanel(new BorderLayout());
-        wrap.setBackground(UIHelper.COLOR_BG);
-        wrap.add(p, BorderLayout.CENTER);
+        JButton btnGen = UIHelper.createButton("맞춤형 플랜 생성", UIHelper.COLOR_HEADER, 0, 0, 150, 30);
+        btnGen.addActionListener(e -> generateCustomPlans());
+        optionPanel.add(btnGen);
 
-        JButton btnGen = UIHelper.createButton("플랜 생성", UIHelper.COLOR_HEADER, 0, 0, 100, 30);
-        btnGen.addActionListener(e -> generatePlanAB());
-        JPanel south = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        south.setBackground(UIHelper.COLOR_BG);
-        south.add(btnGen);
-        wrap.add(south, BorderLayout.SOUTH);
+        root.add(optionPanel, BorderLayout.NORTH);
 
-        p.add(panelA);
-        p.add(panelB);
-        p.add(panelC);
-        return wrap;
+        JPanel planPanel = new JPanel(new GridLayout(1, 3, 8, 0));
+        planPanel.setBackground(UIHelper.COLOR_BG);
+
+        String[] cols = {
+                "순위", "과목명", "이수구분", "경쟁률"
+        };
+
+        JPanel panelMain = createCustomPlanPanel(
+                "추천 플랜 1 - 종합 추천형",
+                "선택한 조건을 전체적으로 반영한 기본 추천 순서입니다.",
+                new Color(37, 99, 168),
+                cols,
+                1
+        );
+
+        JPanel panelSafe = createCustomPlanPanel(
+                "추천 플랜 2 - 안정 보완형",
+                "선택 조건을 유지하면서 성공 가능성이 높은 과목을 더 앞에 둡니다.",
+                new Color(80, 130, 60),
+                cols,
+                2
+        );
+
+        JPanel panelChallenge = createCustomPlanPanel(
+                "추천 플랜 3 - 도전 보완형",
+                "선택 조건을 유지하면서 경쟁률 높은 과목을 더 앞에 둡니다.",
+                new Color(180, 90, 60),
+                cols,
+                3
+        );
+
+        planPanel.add(panelMain);
+        planPanel.add(panelSafe);
+        planPanel.add(panelChallenge);
+
+        root.add(planPanel, BorderLayout.CENTER);
+
+        return root;
     }
 
-    private void generatePlanAB() {
-        if (wishList.isEmpty()) { showMsg("관심 과목을 먼저 담아주세요."); return; }
-        StrategyAnalyzer.PlanAB plan = analyzer.generatePlanAB();
+    private JPanel createCustomPlanPanel(String title,
+                                         String description,
+                                         Color borderColor,
+                                         String[] cols,
+                                         int type) {
+        JPanel panel = new JPanel(new BorderLayout(0, 4));
+        panel.setBackground(UIHelper.COLOR_BG);
+        panel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(borderColor, 1),
+                title
+        ));
 
-        modelPlanA.setRowCount(0);
-        for (int i = 0; i < plan.planA.size(); i++) {
-            Course c = plan.planA.get(i);
-            modelPlanA.addRow(new Object[]{
-                    (i + 1) + "순위", c.getName(), c.getType(),
-                    String.format("%.2f:1", c.getCompetitionRate()),
-                    c.getRiskLevel().getLabel(),
-                    c.getFailureRiskScore() + "점",
-                    c.getSuccessProbability()
-            });
-        }
-        lblPlanACredit.setText("총 학점: " + plan.planACredit + "학점");
+        JLabel desc = new JLabel("<html><small>" + description + "</small></html>");
+        desc.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        panel.add(desc, BorderLayout.NORTH);
 
-        modelPlanB.setRowCount(0);
-        for (int i = 0; i < plan.planB.size(); i++) {
-            Course c = plan.planB.get(i);
-            modelPlanB.addRow(new Object[]{
-                    (i + 1) + "순위", c.getName(), c.getType(),
-                    String.format("%.2f:1", c.getCompetitionRate()),
-                    c.getRiskLevel().getLabel(),
-                    c.getFailureRiskScore() + "점",
-                    c.getSuccessProbability()
-            });
-        }
-        lblPlanBCredit.setText("총 학점: " + plan.planBCredit + "학점");
+        DefaultTableModel model = UIHelper.createReadOnlyModel(cols);
+        JTable table = new JTable(model);
+        UIHelper.styleTable(table);
+        table.getColumnModel().getColumn(3).setCellRenderer(new UIHelper.RateColorRenderer());
+        table.setRowHeight(28);
 
-        modelPlanC.setRowCount(0);
-        for (int i = 0; i < plan.planC.size(); i++) {
-            Course c = plan.planC.get(i);
-            modelPlanC.addRow(new Object[]{
-                    (i + 1) + "순위", c.getName(), c.getType(),
-                    String.format("%.2f:1", c.getCompetitionRate()),
-                    c.getRiskLevel().getLabel(),
-                    c.getFailureRiskScore() + "점",
-                    c.getSuccessProbability()
-            });
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        JLabel creditLabel = new JLabel("총 학점: - | 플랜 예상 성공률: -");
+        creditLabel.setFont(UIHelper.FONT_BODY);
+        creditLabel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        panel.add(creditLabel, BorderLayout.SOUTH);
+
+        if (type == 1) {
+            modelPlanMain = model;
+            lblPlanMainCredit = creditLabel;
+        } else if (type == 2) {
+            modelPlanSafe = model;
+            lblPlanSafeCredit = creditLabel;
+        } else {
+            modelPlanChallenge = model;
+            lblPlanChallengeCredit = creditLabel;
         }
-        lblPlanCCredit.setText("총 학점: " + plan.planCCredit + "학점");
+
+        return panel;
     }
 
+    private void generateCustomPlans() {
+        if (wishList.isEmpty()) {
+            showMsg("관심 과목을 먼저 담아주세요.");
+            return;
+        }
+
+        StrategyAnalyzer.CustomPlanOptions options =
+                new StrategyAnalyzer.CustomPlanOptions(
+                        chkPreferMajor.isSelected(),
+                        chkPreferRequired.isSelected(),
+                        chkPreferSafe.isSelected(),
+                        chkAvoidMorning.isSelected(),
+                        chkPreferThreeCredit.isSelected()
+                );
+
+        StrategyAnalyzer.CustomPlans plans = analyzer.generateCustomPlans(options);
+
+        modelPlanMain.setRowCount(0);
+        fillCustomPlanModel(modelPlanMain, plans.planMain, "종합 추천형");
+        lblPlanMainCredit.setText(
+                "총 학점: " + plans.planMainCredit + "학점"
+                        + " | 플랜 예상 성공률: " + plans.planMainSuccessRate + "%"
+        );
+
+        modelPlanSafe.setRowCount(0);
+        fillCustomPlanModel(modelPlanSafe, plans.planSafe, "안정 보완형");
+        lblPlanSafeCredit.setText(
+                "총 학점: " + plans.planSafeCredit + "학점"
+                        + " | 플랜 예상 성공률: " + plans.planSafeSuccessRate + "%"
+        );
+
+        modelPlanChallenge.setRowCount(0);
+        fillCustomPlanModel(modelPlanChallenge, plans.planChallenge, "도전 보완형");
+        lblPlanChallengeCredit.setText(
+                "총 학점: " + plans.planChallengeCredit + "학점"
+                        + " | 플랜 예상 성공률: " + plans.planChallengeSuccessRate + "%"
+        );
+    }
+
+    private void fillCustomPlanModel(DefaultTableModel model, List<Course> courses, String planType) {
+        for (int i = 0; i < courses.size(); i++) {
+            Course c = courses.get(i);
+
+            model.addRow(new Object[]{
+                    (i + 1) + "순위",
+                    c.getName(),
+                    c.getType(),
+                    String.format("%.2f:1", c.getCompetitionRate())
+            });
+        }
+    }
+
+    private String getCustomPlanReason(Course c, String planType) {
+        StringBuilder reason = new StringBuilder();
+        reason.append(planType).append(" 기준");
+
+        if (chkPreferMajor.isSelected() && c.getType() != null && c.getType().startsWith("전")) {
+            reason.append(" + 전공 우선");
+        }
+
+        if (chkPreferRequired.isSelected() && ("전필".equals(c.getType()) || "교필".equals(c.getType()))) {
+            reason.append(" + 필수 과목");
+        }
+
+        if (chkPreferSafe.isSelected()) {
+            reason.append(" + 안정성 고려");
+        }
+
+        if (chkAvoidMorning.isSelected() && c.getStartPeriod() <= 2) {
+            reason.append(" + 오전 수업 감점");
+        }
+
+        if (chkPreferThreeCredit.isSelected() && c.getCredit() == 3) {
+            reason.append(" + 3학점 선호");
+        }
+
+        return reason.toString();
+    }
 
     // ──────────────────────────────────────────────
-    // 탭 6: 구분별 평균 경쟁률
+    // 탭 7: 구분별 평균 경쟁률
     // ──────────────────────────────────────────────
+
     private JPanel buildAvgRateTab() {
         JPanel p = new JPanel(new BorderLayout(0, 8));
         p.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -535,52 +988,59 @@ public class StrategyPanel extends JPanel {
 
         String[] cols = {"이수구분", "평균 경쟁률", "위험도", "경쟁률 바"};
         modelAvgRate = UIHelper.createReadOnlyModel(cols);
+
         JTable table = new JTable(modelAvgRate);
         UIHelper.styleTable(table);
         table.getColumnModel().getColumn(1).setCellRenderer(new UIHelper.RateColorRenderer());
         table.getColumnModel().getColumn(2).setCellRenderer(new UIHelper.RiskBgRenderer());
         table.setRowHeight(28);
+
         p.add(new JScrollPane(table), BorderLayout.CENTER);
 
         JButton btnLoad = UIHelper.createButton("데이터 불러오기", UIHelper.COLOR_HEADER, 0, 0, 140, 30);
         btnLoad.addActionListener(e -> refreshAvgRate());
+
         JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         south.setBackground(UIHelper.COLOR_BG);
         south.add(btnLoad);
+
         p.add(south, BorderLayout.SOUTH);
+
         return p;
     }
 
     private void refreshAvgRate() {
+        if (modelAvgRate == null) {
+            return;
+        }
+
         modelAvgRate.setRowCount(0);
+
         Map<String, Double> data = analyzer.getAverageRateByType();
         for (Map.Entry<String, Double> entry : data.entrySet()) {
             double rate = entry.getValue();
             RiskLevel risk = RiskLevel.fromRate(rate);
 
-            // 텍스트 바
-            int filled = (int) Math.min(rate * 4, 20);
-            StringBuilder bar = new StringBuilder("[");
-            for (int i = 0; i < 20; i++) bar.append(i < filled ? "█" : "░");
-            bar.append(String.format("] %.2f:1", rate));
-
             modelAvgRate.addRow(new Object[]{
                     entry.getKey(),
                     String.format("%.2f:1", rate),
                     risk.getLabel(),
-                    bar.toString()
+                    makeTextBar(rate) + String.format(" %.2f:1", rate)
             });
         }
     }
 
     // ──────────────────────────────────────────────
-    // 공통: ComboBox 새로고침 (전체 과목 / 관심 과목)
+    // 공통 메서드
     // ──────────────────────────────────────────────
 
-    /** 시뮬레이션·대체 과목 콤보박스를 전체 과목으로 채움 */
+    /**
+     * 시뮬레이션·대체 과목 콤보박스를 전체 과목으로 채움
+     */
     public void refreshCombos() {
-        cbSimCourse.removeAllItems();
+        if (cbAltCourse == null) return; // null이면 그냥 리턴
         cbAltCourse.removeAllItems();
+
         for (Course c : courseManager.getCourseList()) {
             String item = c.getId() + ". " + c.getName()
                     + " (" + String.format("%.2f", c.getCompetitionRate()) + ":1)";
@@ -589,7 +1049,123 @@ public class StrategyPanel extends JPanel {
         }
     }
 
+    public void refreshAll() {
+        refreshPriority();
+        refreshCombos();
+        refreshTimetable();
+        refreshAvgRate();
+    }
+
     private void showMsg(String msg) {
         JOptionPane.showMessageDialog(this, msg);
     }
-}
+
+    private String getAlternativeReason(Course target, Course alt) {
+        StringBuilder sb = new StringBuilder();
+
+        if (alt.getCategory().equals(target.getCategory())) {
+            sb.append("같은 분야");
+        } else {
+            sb.append("같은 이수구분");
+        }
+
+        sb.append(" + 낮은 경쟁률");
+
+        if (Math.abs(alt.getCredit() - target.getCredit()) <= 1) {
+            sb.append(" + 유사 학점");
+        }
+
+        sb.append(" + 시간표 충돌 없음");
+
+        return sb.toString();
+    }
+
+    private static class MultiLineCellRenderer extends JTextArea implements TableCellRenderer {
+        public MultiLineCellRenderer() {
+            setLineWrap(true);
+            setWrapStyleWord(true);
+            setOpaque(true);
+            setFont(UIHelper.FONT_BODY);
+            setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        }
+
+        @Override
+        public Component getTableCellRendererComponent(
+                JTable table,
+                Object value,
+                boolean isSelected,
+                boolean hasFocus,
+                int row,
+                int column
+        ) {
+            RiskLevel riskLevel = null;
+
+            if (value instanceof TimetableCell) {
+                TimetableCell cell = (TimetableCell) value;
+                setText(cell.getText());
+                riskLevel = cell.getRiskLevel();
+            } else {
+                setText(value == null ? "" : value.toString());
+            }
+
+            if (isSelected) {
+                setBackground(table.getSelectionBackground());
+                setForeground(table.getSelectionForeground());
+            } else {
+                setForeground(Color.DARK_GRAY);
+                setBackground(getLightRiskColor(riskLevel));
+            }
+
+            return this;
+        }
+
+        private Color getLightRiskColor(RiskLevel riskLevel) {
+            if (riskLevel == null) {
+                return Color.WHITE;
+            }
+
+            switch (riskLevel) {
+                case RELAXED:
+                    return new Color(225, 238, 255); // 여유: 연한 파랑
+                case NORMAL:
+                    return new Color(225, 245, 232); // 보통: 연한 초록
+                case WARNING:
+                    return new Color(255, 248, 210); // 주의: 연한 노랑
+                case DANGER:
+                    return new Color(255, 228, 225); // 매우 위험: 연한 빨강
+                default:
+                    return Color.WHITE;
+            }
+        }
+    }
+
+    private static class TimetableCell {
+        private final String text;
+        private final RiskLevel riskLevel;
+
+        public TimetableCell(String text, RiskLevel riskLevel) {
+            this.text = text;
+            this.riskLevel = riskLevel;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public RiskLevel getRiskLevel() {
+            return riskLevel;
+        }
+
+        @Override
+        public String toString() {
+            return text;
+        }
+    }
+    private void setSimplePlanColumnWidths(JTable table) {
+        table.setRowHeight(30);
+
+        table.getColumnModel().getColumn(0).setPreferredWidth(50);   // 순위
+        table.getColumnModel().getColumn(1).setPreferredWidth(180);  // 과목명
+        table.getColumnModel().getColumn(2).setPreferredWidth(70);   // 이수구분
+        table.getColumnModel().getColumn(3).setPreferredWidth(80);   // 경쟁률
+    }}
